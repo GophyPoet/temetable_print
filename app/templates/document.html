@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<style>
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  @page {
+    size: {{ config.PAGE_WIDTH_MM }}mm {{ config.PAGE_HEIGHT_MM }}mm;
+    margin: {{ config.MARGIN_TOP_MM }}mm {{ config.MARGIN_RIGHT_MM }}mm {{ config.MARGIN_BOTTOM_MM }}mm {{ config.MARGIN_LEFT_MM }}mm;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: "DejaVu Sans", "Noto Sans", "Liberation Sans", Arial, Helvetica, sans-serif;
+    color: #111;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page {
+    width: {{ config.PAGE_WIDTH_MM - config.MARGIN_LEFT_MM - config.MARGIN_RIGHT_MM }}mm;
+    height: {{ config.PAGE_HEIGHT_MM - config.MARGIN_TOP_MM - config.MARGIN_BOTTOM_MM }}mm;
+    overflow: hidden;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+
+  .page:last-child {
+    page-break-after: auto;
+  }
+
+  .schedule-table {
+    width: 100%;
+    height: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+
+  .schedule-table td,
+  .schedule-table th {
+    border: 1px solid {{ config.BORDER_COLOR }};
+    padding: 0.5mm 1mm;
+    text-align: center;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    overflow: hidden;
+    line-height: 1.15;
+  }
+
+  /* Title row */
+  .row-title td {
+    font-weight: bold;
+    letter-spacing: 0.3px;
+    padding: 1.5mm 1mm;
+    border: none;
+    border-bottom: 2px solid {{ config.BORDER_COLOR }};
+    font-size: 1.3em;
+  }
+
+  /* Teacher row */
+  .row-teacher td {
+    font-size: 0.78em;
+    padding: 0.3mm 0.8mm;
+    font-style: italic;
+    color: #444;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row-teacher td:first-child {
+    font-style: normal;
+    font-weight: bold;
+    color: #111;
+  }
+
+  /* Header row */
+  .row-header td {
+    font-weight: bold;
+    background: {{ config.HEADER_BG_COLOR }};
+    padding: 0.8mm 1mm;
+  }
+
+  /* Day cells — vertical text, bottom-to-top */
+  .cell-day {
+    font-weight: bold;
+    background: {{ config.DAY_BG_COLOR }};
+    font-size: 0.72em;
+    padding: 0.2mm !important;
+    letter-spacing: 0.5px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    white-space: nowrap;
+  }
+
+  .cell-num {
+    font-weight: bold;
+  }
+
+  .cell-time {
+    font-size: 0.78em;
+    white-space: nowrap;
+    color: #333;
+    padding: 0.3mm 0.5mm !important;
+    text-align: left;
+  }
+
+  .cell-subject {
+    font-size: 0.92em;
+  }
+
+</style>
+</head>
+<body>
+{% for page_data in pages %}
+<div class="page" style="font-size: {{ page_data.font_size }}pt;">
+  <table class="schedule-table">
+    <colgroup>
+    {% for w in page_data.col_widths %}
+      <col style="width: {{ w }}%;">
+    {% endfor %}
+    </colgroup>
+    <tbody>
+    {% for row_idx, row in page_data.sheet.rows | enumerate_rows %}
+      {% set row_class = "" %}
+      {% if row_idx == 0 %}
+        {% set row_class = "row-title" %}
+      {% elif row_idx == 1 %}
+        {% set row_class = "row-teacher" %}
+      {% elif row_idx == 2 %}
+        {% set row_class = "row-header" %}
+      {% else %}
+        {% set row_class = "row-data" %}
+      {% endif %}
+      <tr class="{{ row_class }}">
+        {% for cell in row %}
+          {% if not cell.is_merged_slave %}
+            {% set cell_class = "" %}
+            {% if row_idx >= 3 %}
+              {% if cell.merge_height > 1 %}
+                {% set cell_class = "cell-day" %}
+              {% elif loop.index0 == 1 %}
+                {% set cell_class = "cell-num" %}
+              {% elif loop.index0 == 2 %}
+                {% set cell_class = "cell-time" %}
+              {% elif loop.index0 >= 3 %}
+                {% set cell_class = "cell-subject" %}
+              {% endif %}
+            {% endif %}
+            <td
+              {% if cell.merge_width > 1 %}colspan="{{ cell.merge_width }}"{% endif %}
+              {% if cell.merge_height > 1 %}rowspan="{{ cell.merge_height }}"{% endif %}
+              class="{{ cell_class }}"
+              {% if cell.bold and row_idx >= 3 and cell_class == "cell-subject" %}style="font-weight: bold;"{% endif %}
+            >{{ cell.value | e }}</td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+</body>
+</html>

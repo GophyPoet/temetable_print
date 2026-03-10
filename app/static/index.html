@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Расписание → PDF</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-hover: #1d4ed8;
+    --success: #16a34a;
+    --error: #dc2626;
+    --bg: #f8fafc;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1e293b;
+    --text-secondary: #64748b;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+
+  .container {
+    max-width: 680px;
+    width: 100%;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+
+  .subtitle {
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 32px;
+    font-size: 15px;
+  }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--card);
+    margin-bottom: 20px;
+  }
+
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--primary);
+    background: #eff6ff;
+  }
+
+  .dropzone-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+    opacity: 0.6;
+  }
+
+  .dropzone-text {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .dropzone-hint {
+    font-size: 13px;
+    color: #94a3b8;
+  }
+
+  .dropzone input[type="file"] {
+    display: none;
+  }
+
+  /* File list */
+  .file-list {
+    margin-bottom: 20px;
+  }
+
+  .file-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+
+  .file-item-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-item-size {
+    color: var(--text-secondary);
+    margin-left: 12px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .file-item-remove {
+    margin-left: 12px;
+    background: none;
+    border: none;
+    color: var(--error);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+    line-height: 1;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+  }
+
+  .btn-primary {
+    background: var(--primary);
+    color: white;
+    width: 100%;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-success {
+    background: var(--success);
+    color: white;
+  }
+
+  .btn-success:hover {
+    background: #15803d;
+  }
+
+  .btn-outline {
+    background: white;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+  }
+
+  .btn-outline:hover {
+    background: #eff6ff;
+  }
+
+  /* Results */
+  .results {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-top: 20px;
+  }
+
+  .results h2 {
+    font-size: 18px;
+    margin-bottom: 16px;
+  }
+
+  .result-file {
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .result-file:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
+  }
+
+  .result-file-name {
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  .result-file-status {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .sheet-list {
+    list-style: none;
+    font-size: 13px;
+  }
+
+  .sheet-list li {
+    padding: 3px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sheet-ok::before { content: "✓"; color: var(--success); font-weight: bold; }
+  .sheet-skip::before { content: "—"; color: var(--text-secondary); }
+
+  .download-area {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+
+  .download-area .btn {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  /* Progress */
+  .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 16px 0;
+    display: none;
+  }
+
+  .progress-bar.active {
+    display: block;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--primary);
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.3s;
+    animation: indeterminate 1.5s infinite;
+  }
+
+  @keyframes indeterminate {
+    0% { width: 0%; margin-left: 0; }
+    50% { width: 60%; margin-left: 20%; }
+    100% { width: 0%; margin-left: 100%; }
+  }
+
+  /* Error */
+  .error-msg {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: var(--error);
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin-top: 16px;
+    font-size: 14px;
+  }
+
+  /* Preview */
+  .preview-frame {
+    width: 100%;
+    height: 500px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 16px;
+  }
+
+  /* Status text */
+  .status-text {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-top: 12px;
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Расписание → PDF</h1>
+  <p class="subtitle">Загрузите Excel-файлы с расписанием и получите готовый PDF для печати</p>
+
+  <div class="dropzone" id="dropzone">
+    <div class="dropzone-icon">📄</div>
+    <div class="dropzone-text">Перетащите файлы сюда или нажмите для выбора</div>
+    <div class="dropzone-hint">Поддерживаемые форматы: .xlsx, .xls</div>
+    <input type="file" id="fileInput" multiple accept=".xlsx,.xls">
+  </div>
+
+  <div class="file-list" id="fileList"></div>
+
+  <button class="btn btn-primary" id="processBtn" disabled>
+    Сформировать PDF
+  </button>
+
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-bar-fill"></div>
+  </div>
+
+  <div class="status-text hidden" id="statusText"></div>
+  <div class="error-msg hidden" id="errorMsg"></div>
+  <div class="results hidden" id="results"></div>
+</div>
+
+<script>
+(function() {
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileList = document.getElementById('fileList');
+  const processBtn = document.getElementById('processBtn');
+  const progressBar = document.getElementById('progressBar');
+  const statusText = document.getElementById('statusText');
+  const errorMsg = document.getElementById('errorMsg');
+  const results = document.getElementById('results');
+
+  let selectedFiles = [];
+
+  // --- Drop zone ---
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('drag-over');
+  });
+
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.classList.remove('drag-over');
+  });
+
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    addFiles(e.dataTransfer.files);
+  });
+
+  fileInput.addEventListener('change', () => {
+    addFiles(fileInput.files);
+    fileInput.value = '';
+  });
+
+  function addFiles(fileListObj) {
+    for (const file of fileListObj) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (['xlsx', 'xls'].includes(ext)) {
+        // Avoid duplicates
+        if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
+          selectedFiles.push(file);
+        }
+      }
+    }
+    renderFileList();
+  }
+
+  function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    renderFileList();
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' Б';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' КБ';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
+  }
+
+  function renderFileList() {
+    fileList.innerHTML = '';
+    selectedFiles.forEach((file, i) => {
+      const div = document.createElement('div');
+      div.className = 'file-item';
+      div.innerHTML = `
+        <span class="file-item-name">${escapeHtml(file.name)}</span>
+        <span class="file-item-size">${formatSize(file.size)}</span>
+        <button class="file-item-remove" data-index="${i}" title="Удалить">&times;</button>
+      `;
+      fileList.appendChild(div);
+    });
+
+    // Attach remove handlers
+    fileList.querySelectorAll('.file-item-remove').forEach(btn => {
+      btn.addEventListener('click', () => removeFile(parseInt(btn.dataset.index)));
+    });
+
+    processBtn.disabled = selectedFiles.length === 0;
+
+    // Hide previous results
+    results.classList.add('hidden');
+    errorMsg.classList.add('hidden');
+  }
+
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // --- Processing ---
+  processBtn.addEventListener('click', async () => {
+    if (selectedFiles.length === 0) return;
+
+    processBtn.disabled = true;
+    progressBar.classList.add('active');
+    statusText.textContent = 'Обработка файлов...';
+    statusText.classList.remove('hidden');
+    errorMsg.classList.add('hidden');
+    results.classList.add('hidden');
+
+    const formData = new FormData();
+    selectedFiles.forEach(file => formData.append('files', file));
+
+    try {
+      const response = await fetch('/api/process', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      progressBar.classList.remove('active');
+
+      if (!response.ok || data.error) {
+        errorMsg.textContent = data.error || 'Произошла ошибка при обработке';
+        errorMsg.classList.remove('hidden');
+
+        if (data.files && data.files.length > 0) {
+          renderResults(data);
+        }
+
+        statusText.classList.add('hidden');
+        processBtn.disabled = false;
+        return;
+      }
+
+      statusText.textContent = `Готово! Сформировано страниц: ${data.total_pages}`;
+      renderResults(data);
+
+    } catch (err) {
+      progressBar.classList.remove('active');
+      errorMsg.textContent = 'Ошибка сети: ' + err.message;
+      errorMsg.classList.remove('hidden');
+      statusText.classList.add('hidden');
+    }
+
+    processBtn.disabled = false;
+  });
+
+  function renderResults(data) {
+    let html = '<h2>Результаты обработки</h2>';
+
+    if (data.files) {
+      data.files.forEach(file => {
+        html += `<div class="result-file">`;
+        html += `<div class="result-file-name">${escapeHtml(file.filename)}</div>`;
+        html += `<div class="result-file-status">${escapeHtml(file.message)}</div>`;
+
+        if (file.sheets && file.sheets.length > 0) {
+          html += '<ul class="sheet-list">';
+          file.sheets.forEach(sheet => {
+            const cls = sheet.skipped ? 'sheet-skip' : 'sheet-ok';
+            let label = escapeHtml(sheet.name);
+            if (sheet.skipped) {
+              label += ` <span style="color:#94a3b8">(пропущен: ${escapeHtml(sheet.skip_reason)})</span>`;
+            } else {
+              label += ` <span style="color:#16a34a">(${sheet.rows} строк, ${sheet.cols} столбцов)</span>`;
+            }
+            html += `<li class="${cls}">${label}</li>`;
+          });
+          html += '</ul>';
+        }
+
+        html += '</div>';
+      });
+    }
+
+    if (data.downloads) {
+      html += '<div class="download-area">';
+      html += `<a href="${data.downloads.combined_pdf}" class="btn btn-success" download>Скачать PDF (все расписания)</a>`;
+      if (data.total_pages > 1) {
+        html += `<a href="${data.downloads.separate_zip}" class="btn btn-outline" download>Скачать по отдельности (ZIP)</a>`;
+      }
+      html += '</div>';
+
+      // Preview
+      html += `<iframe src="/api/preview/${data.session_id}" class="preview-frame"></iframe>`;
+    }
+
+    results.innerHTML = html;
+    results.classList.remove('hidden');
+  }
+})();
+</script>
+</body>
+</html>
