@@ -13,15 +13,6 @@
 
 <style>
 /* ═══════════════════════════════════════════
-   НАСТРОЙКИ (можно менять)
-   ═══════════════════════════════════════════ */
-:root {
-    --page-margin-mm: 6;
-    --min-font-pt: 7;
-    --max-font-pt: 14;
-}
-
-/* ═══════════════════════════════════════════
    UI СТИЛИ
    ═══════════════════════════════════════════ */
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -31,8 +22,6 @@ body {
     color: #1e293b;
     min-height: 100vh;
 }
-
-/* Шапка / загрузка */
 .upload-screen {
     display: flex;
     justify-content: center;
@@ -118,7 +107,7 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
 /* ═══════════════════════════════════════════
-   РЕНДЕРИНГ СТРАНИЦ (скрытый контейнер)
+   СКРЫТЫЙ КОНТЕЙНЕР ДЛЯ РЕНДЕРИНГА
    ═══════════════════════════════════════════ */
 #renderArea {
     position: absolute;
@@ -149,7 +138,6 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
     box-shadow: 0 2px 12px rgba(0,0,0,0.15);
     border-radius: 4px;
     overflow: hidden;
-    /* A4 ratio preview */
     width: 750px;
     max-width: 95vw;
 }
@@ -162,28 +150,54 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 }
 
 /* ═══════════════════════════════════════════
-   СТИЛИ СТРАНИЦЫ РАСПИСАНИЯ (для рендеринга)
+   СТИЛИ СТРАНИЦЫ РАСПИСАНИЯ
    ═══════════════════════════════════════════ */
 .timetable-page {
-    width: 198mm;   /* A4 - margins */
-    min-height: 285mm;
+    /* Точные размеры A4 минус отступы */
+    width: 198mm;
+    height: 285mm;
     padding: 0;
-    font-family: "DejaVu Sans", "Liberation Sans", "Noto Sans", Arial, sans-serif;
     background: #fff;
+    overflow: hidden;
 }
 .timetable-page table {
     width: 100%;
+    height: 100%;  /* КЛЮЧЕВОЕ: таблица на всю высоту страницы */
     border-collapse: collapse;
     table-layout: fixed;
+    font-family: "Times New Roman", "Noto Serif", Georgia, serif;
+    font-size: 12pt;
+    line-height: 1.15;
 }
 .timetable-page th,
 .timetable-page td {
-    border: 1.2px solid #222;
+    border: 1px solid #000;
     text-align: center;
     vertical-align: middle;
+    padding: 2px 3px;
     word-wrap: break-word;
     overflow-wrap: break-word;
     overflow: hidden;
+    font-family: "Times New Roman", "Noto Serif", Georgia, serif;
+    font-size: 12pt;
+}
+/* Заголовок расписания */
+.timetable-page .title-row th,
+.timetable-page .title-row td {
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+}
+/* Строка учителей */
+.timetable-page .teacher-row th,
+.timetable-page .teacher-row td {
+    font-style: italic;
+}
+/* Строка заголовков столбцов */
+.timetable-page .header-row th,
+.timetable-page .header-row td {
+    font-weight: bold;
+    background: #e8e8e8;
+    border-bottom: 2px solid #000;
 }
 /* Вертикальный текст дня недели */
 .timetable-page .day-vertical {
@@ -193,35 +207,16 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
     font-weight: bold;
     letter-spacing: 1px;
     white-space: nowrap;
-    text-align: center;
     padding: 2px 1px;
-}
-/* Заголовок расписания */
-.timetable-page .title-row td,
-.timetable-page .title-row th {
-    font-weight: bold;
-    border-bottom: 2px solid #000;
-}
-/* Строка учителей */
-.timetable-page .teacher-row td,
-.timetable-page .teacher-row th {
-    font-style: italic;
-}
-/* Строка заголовков столбцов */
-.timetable-page .header-row td,
-.timetable-page .header-row th {
-    font-weight: bold;
-    background: #e8e8e8;
-    border-bottom: 2px solid #000;
 }
 /* Колонка номера урока */
 .timetable-page .lesson-num {
     width: 1.8em;
-    text-align: center;
 }
 /* Колонка времени */
 .timetable-page .time-col {
     white-space: nowrap;
+    width: 5.5em;
 }
 
 /* ═══════════════════════════════════════════
@@ -237,10 +232,6 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
         page-break-after: always;
         page-break-inside: avoid;
         width: 100%;
-        min-height: auto;
-        height: 100vh;
-    }
-    .timetable-page table {
         height: 100vh;
     }
     @page {
@@ -290,19 +281,12 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 
 <script>
 /* ═══════════════════════════════════════════════════════
-   КОНФИГУРАЦИЯ (можно менять)
+   КОНФИГУРАЦИЯ
    ═══════════════════════════════════════════════════════ */
 const CONFIG = {
-    // Листы, которые НЕ являются расписаниями (пропускаем)
     skipSheets: new Set(["Предметы", "Звонки"]),
-    // Подстроки в имени листа для пропуска
     skipPatterns: [],
-    // Размеры шрифта (pt)
-    minFontPt: 7,
-    maxFontPt: 14,
-    // Отступы страницы (mm)
     pageMarginMm: 6,
-    // Поворачивать дни недели вертикально
     rotateDayNames: true,
 };
 
@@ -314,7 +298,7 @@ const DAYS = new Set([
    СОСТОЯНИЕ
    ═══════════════════════════════════════════════════════ */
 let selectedFiles = [];
-let renderedPages = [];  // [{name, title, html, element}]
+let renderedPages = [];
 
 /* ═══════════════════════════════════════════════════════
    UI: ЗАГРУЗКА ФАЙЛОВ
@@ -428,10 +412,8 @@ async function processOneFile(file, reportData) {
         return;
     }
 
-    // 1) Загрузить расписание звонков
     const bells = loadBells(wb);
 
-    // 2) Обработать каждый лист
     for (const sheetName of wb.SheetNames) {
         const skipReason = shouldSkip(sheetName);
         if (skipReason) {
@@ -487,7 +469,6 @@ function loadBells(wb) {
 
 function resolveValue(cell, bells) {
     if (!cell) return "";
-    // Проверяем формулу-ссылку на Звонки
     if (cell.f) {
         const m = cell.f.match(/^Звонки!([A-Z]+)(\d+)$/i);
         if (m) {
@@ -510,7 +491,6 @@ function parseSheet(ws, sheetName, bells) {
     const numCols = range.e.c - range.s.c + 1;
     if (numRows < 3) return null;
 
-    // Карта merged cells: {r_c: {rs, cs}} для origin, Set для covered
     const mergeMap = {};
     const covered = new Set();
     if (ws["!merges"]) {
@@ -530,7 +510,6 @@ function parseSheet(ws, sheetName, bells) {
         }
     }
 
-    // Считать данные
     const rows = [];
     let title = "";
     for (let r = range.s.r; r <= range.e.r; r++) {
@@ -542,14 +521,12 @@ function parseSheet(ws, sheetName, bells) {
             const val = resolveValue(cell, bells);
             if (r === range.s.r && c === range.s.c) title = val;
 
-            const cd = { value: val, rowspan: 1, colspan: 1, bold: false, col: c - range.s.c };
+            const cd = { value: val, rowspan: 1, colspan: 1, col: c - range.s.c };
             const mk = `${r}_${c}`;
             if (mergeMap[mk]) {
                 cd.rowspan = mergeMap[mk].rs;
                 cd.colspan = mergeMap[mk].cs;
             }
-            // Определяем жирный по позиции (строки 0-2 или первый столбец дней)
-            if (r - range.s.r < 3) cd.bold = true;
             row.push(cd);
         }
         rows.push(row);
@@ -561,27 +538,11 @@ function parseSheet(ws, sheetName, bells) {
 /* ═══════════════════════════════════════════════════════
    РЕНДЕРИНГ HTML-СТРАНИЦЫ
    ═══════════════════════════════════════════════════════ */
-function estimateFontSize(numRows) {
-    if (numRows >= 44) return CONFIG.minFontPt;
-    if (numRows >= 38) return Math.max(CONFIG.minFontPt, 8);
-    if (numRows >= 32) return Math.max(CONFIG.minFontPt, 9);
-    if (numRows >= 28) return Math.max(CONFIG.minFontPt, 10);
-    return CONFIG.maxFontPt;
-}
-
 function isDayCell(val) {
     return DAYS.has(val.trim().toUpperCase());
 }
 
 function buildPageHtml(sheet) {
-    const fontSize = estimateFontSize(sheet.numRows);
-    const dense = sheet.numRows >= 40;
-    const cellPad = dense ? "1px 2px" : "2px 3px";
-    const titleFontSize = Math.min(fontSize + 3, CONFIG.maxFontPt + 3);
-    const smallFontSize = Math.max(fontSize - 1, CONFIG.minFontPt);
-    const lineH = dense ? 1.05 : 1.15;
-    const timColW = "5.5em";
-
     let html = "";
     for (let ri = 0; ri < sheet.rows.length; ri++) {
         const row = sheet.rows[ri];
@@ -594,7 +555,6 @@ function buildPageHtml(sheet) {
         for (const cell of row) {
             const tag = ri < 3 ? "th" : "td";
             let attrs = "";
-            let styles = [];
             let cls = [];
 
             if (cell.rowspan > 1) attrs += ` rowspan="${cell.rowspan}"`;
@@ -603,33 +563,21 @@ function buildPageHtml(sheet) {
             // Вертикальный день недели
             if (CONFIG.rotateDayNames && isDayCell(cell.value) && cell.rowspan > 1) {
                 cls.push("day-vertical");
-                styles.push(`font-size:${smallFontSize}pt`);
             }
-
-            // Размер шрифта для специальных строк
-            if (ri === 0) styles.push(`font-size:${titleFontSize}pt`);
-            else if (ri === 1) styles.push(`font-size:${smallFontSize}pt`);
 
             // Номер урока — узкая колонка
             if (ri >= 3 && cell.col === 1) cls.push("lesson-num");
             // Время
-            if (ri >= 3 && cell.col === 2) {
-                cls.push("time-col");
-                styles.push(`font-size:${smallFontSize}pt`);
-                styles.push(`width:${timColW}`);
-            }
+            if (ri >= 3 && cell.col === 2) cls.push("time-col");
 
             if (cls.length) attrs += ` class="${cls.join(" ")}"`;
-            if (styles.length) attrs += ` style="${styles.join(";")}"`;
 
             html += `<${tag}${attrs}>${esc(cell.value)}</${tag}>`;
         }
         html += `</tr>`;
     }
 
-    return `<div class="timetable-page" style="font-size:${fontSize}pt;line-height:${lineH};padding:${CONFIG.pageMarginMm}mm">
-<table>${html}</table>
-</div>`;
+    return `<div class="timetable-page"><table>${html}</table></div>`;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -686,8 +634,8 @@ async function generatePdf() {
         const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
         const pageW = 210;
         const pageH = 297;
+        const margin = CONFIG.pageMarginMm;
 
-        // Рендерим каждую страницу в скрытый div, делаем canvas, добавляем в PDF
         const renderArea = document.getElementById("renderArea");
 
         for (let i = 0; i < renderedPages.length; i++) {
@@ -695,16 +643,11 @@ async function generatePdf() {
 
             statusEl.textContent = `Генерация PDF... страница ${i+1} из ${renderedPages.length}`;
 
-            // Создаём временный элемент с точными размерами A4
             const tempDiv = document.createElement("div");
-            tempDiv.style.cssText = `width:198mm;min-height:285mm;position:absolute;left:0;top:0;background:#fff;`;
+            tempDiv.style.cssText = `position:absolute;left:0;top:0;background:#fff;`;
             tempDiv.innerHTML = renderedPages[i].html;
-            // Ставим table height:100% чтобы заполнить страницу
-            const tbl = tempDiv.querySelector("table");
-            if (tbl) tbl.style.height = "285mm";
             renderArea.appendChild(tempDiv);
 
-            // Небольшая задержка для рендеринга
             await new Promise(r => setTimeout(r, 50));
 
             const canvas = await html2canvas(tempDiv, {
@@ -719,14 +662,10 @@ async function generatePdf() {
             renderArea.removeChild(tempDiv);
 
             const imgData = canvas.toDataURL("image/jpeg", 0.95);
-            const imgW = pageW - CONFIG.pageMarginMm * 2;
-            const imgH = (canvas.height / canvas.width) * imgW;
-            const finalH = Math.min(imgH, pageH - CONFIG.pageMarginMm * 2);
-            const finalW = (finalH < imgH) ? (canvas.width / canvas.height) * finalH : imgW;
-            const x = (pageW - finalW) / 2;
-            const y = (pageH - finalH) / 2;
-
-            pdf.addImage(imgData, "JPEG", x, y, finalW, finalH);
+            // Изображение вписываем точно в область страницы A4 без пустот
+            const contentW = pageW - margin * 2;
+            const contentH = pageH - margin * 2;
+            pdf.addImage(imgData, "JPEG", margin, margin, contentW, contentH);
         }
 
         pdf.save("Расписание.pdf");
@@ -745,9 +684,6 @@ function printPages() {
     for (const p of renderedPages) {
         const div = document.createElement("div");
         div.innerHTML = p.html;
-        // Ставим table height для заполнения страницы при печати
-        const tbl = div.querySelector("table");
-        if (tbl) tbl.style.height = "100%";
         renderArea.appendChild(div.firstElementChild);
     }
     window.print();
