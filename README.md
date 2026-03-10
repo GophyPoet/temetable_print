@@ -1,1 +1,0 @@
-# temetable_print
