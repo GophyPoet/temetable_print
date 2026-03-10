@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Расписание → PDF</title>
+
+<!-- SheetJS для парсинга Excel -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<!-- jsPDF + html2canvas для генерации PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<style>
+/* ═══════════════════════════════════════════
+   НАСТРОЙКИ (можно менять)
+   ═══════════════════════════════════════════ */
+:root {
+    --page-margin-mm: 6;
+    --min-font-pt: 7;
+    --max-font-pt: 14;
+}
+
+/* ═══════════════════════════════════════════
+   UI СТИЛИ
+   ═══════════════════════════════════════════ */
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f8fafc;
+    color: #1e293b;
+    min-height: 100vh;
+}
+
+/* Шапка / загрузка */
+.upload-screen {
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+}
+.upload-container {
+    width: 100%;
+    max-width: 640px;
+}
+h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+.subtitle { color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
+
+.dropzone {
+    border: 2px dashed #e2e8f0;
+    border-radius: 12px;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    background: #fff;
+}
+.dropzone:hover, .dropzone.dragover {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+.dropzone-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+.dropzone-text { color: #64748b; font-size: 0.95rem; }
+.dropzone-text b { color: #2563eb; }
+
+.file-list { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.file-item {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 0.5rem 0.75rem; font-size: 0.9rem;
+}
+.file-item .name { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.file-item .remove {
+    background:none; border:none; color:#dc2626; cursor:pointer;
+    font-size:1.1rem; padding:0 0.25rem; margin-left:0.5rem;
+}
+.file-item .size { color:#64748b; font-size:.8rem; margin-left:.5rem; white-space:nowrap; }
+
+.btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:0.4rem;
+    padding:0.7rem 1.5rem; border:none; border-radius:8px;
+    font-size:1rem; font-weight:600; cursor:pointer; transition:background .2s;
+    width:100%; margin-top:1rem;
+}
+.btn-primary { background:#2563eb; color:#fff; }
+.btn-primary:hover { background:#1d4ed8; }
+.btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+.btn-success { background:#16a34a; color:#fff; text-decoration:none; }
+.btn-success:hover { opacity:.9; }
+.btn-outline { background:#fff; color:#2563eb; border:2px solid #2563eb; }
+.btn-outline:hover { background:#eff6ff; }
+
+.status {
+    margin-top:1rem; padding:1rem; border-radius:8px; font-size:0.9rem; display:none;
+}
+.status.loading { display:block; background:#eff6ff; color:#2563eb; }
+.status.success { display:block; background:#f0fdf4; color:#16a34a; }
+.status.error   { display:block; background:#fef2f2; color:#dc2626; }
+
+.report {
+    margin-top:1rem; background:#fff; border:1px solid #e2e8f0; border-radius:8px;
+    padding:1rem; font-size:0.85rem; display:none;
+}
+.report h3 { font-size:0.95rem; margin-bottom:0.5rem; }
+.report ul { list-style:none; padding:0; }
+.report li { padding:0.15rem 0; }
+.report li::before { content:"• "; color:#64748b; }
+.report .skipped { color:#64748b; font-style:italic; }
+.report .skipped::before { content:"⊘ "; }
+
+.buttons-row { display:flex; gap:0.5rem; margin-top:1rem; }
+.buttons-row .btn { flex:1; }
+
+.spinner {
+    display:inline-block; width:1rem; height:1rem;
+    border:2px solid #fff; border-top-color:transparent;
+    border-radius:50%; animation:spin .6s linear infinite;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ═══════════════════════════════════════════
+   РЕНДЕРИНГ СТРАНИЦ (скрытый контейнер)
+   ═══════════════════════════════════════════ */
+#renderArea {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+}
+
+/* ═══════════════════════════════════════════
+   ПРЕДПРОСМОТР
+   ═══════════════════════════════════════════ */
+.preview-section {
+    display: none;
+    padding: 1rem;
+}
+.preview-section h2 {
+    text-align: center;
+    margin-bottom: 1rem;
+    font-size: 1.2rem;
+}
+.preview-pages {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+}
+.preview-page-wrapper {
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    border-radius: 4px;
+    overflow: hidden;
+    /* A4 ratio preview */
+    width: 750px;
+    max-width: 95vw;
+}
+.preview-page-label {
+    background: #f1f5f9;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.8rem;
+    color: #64748b;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+/* ═══════════════════════════════════════════
+   СТИЛИ СТРАНИЦЫ РАСПИСАНИЯ (для рендеринга)
+   ═══════════════════════════════════════════ */
+.timetable-page {
+    width: 198mm;   /* A4 - margins */
+    min-height: 285mm;
+    padding: 0;
+    font-family: "DejaVu Sans", "Liberation Sans", "Noto Sans", Arial, sans-serif;
+    background: #fff;
+}
+.timetable-page table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+.timetable-page th,
+.timetable-page td {
+    border: 1.2px solid #222;
+    text-align: center;
+    vertical-align: middle;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    overflow: hidden;
+}
+/* Вертикальный текст дня недели */
+.timetable-page .day-vertical {
+    writing-mode: vertical-lr;
+    transform: rotate(180deg);
+    text-orientation: mixed;
+    font-weight: bold;
+    letter-spacing: 1px;
+    white-space: nowrap;
+    text-align: center;
+    padding: 2px 1px;
+}
+/* Заголовок расписания */
+.timetable-page .title-row td,
+.timetable-page .title-row th {
+    font-weight: bold;
+    border-bottom: 2px solid #000;
+}
+/* Строка учителей */
+.timetable-page .teacher-row td,
+.timetable-page .teacher-row th {
+    font-style: italic;
+}
+/* Строка заголовков столбцов */
+.timetable-page .header-row td,
+.timetable-page .header-row th {
+    font-weight: bold;
+    background: #e8e8e8;
+    border-bottom: 2px solid #000;
+}
+/* Колонка номера урока */
+.timetable-page .lesson-num {
+    width: 1.8em;
+    text-align: center;
+}
+/* Колонка времени */
+.timetable-page .time-col {
+    white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════
+   ПЕЧАТЬ
+   ═══════════════════════════════════════════ */
+@media print {
+    body > *:not(#renderArea) { display: none !important; }
+    #renderArea {
+        position: static !important;
+        left: auto !important;
+    }
+    .timetable-page {
+        page-break-after: always;
+        page-break-inside: avoid;
+        width: 100%;
+        min-height: auto;
+        height: 100vh;
+    }
+    .timetable-page table {
+        height: 100vh;
+    }
+    @page {
+        size: A4 portrait;
+        margin: 6mm;
+    }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════ ЭКРАН ЗАГРУЗКИ ════════ -->
+<div class="upload-screen" id="uploadScreen">
+<div class="upload-container">
+    <h1>Расписание → PDF</h1>
+    <p class="subtitle">Загрузите Excel-файлы с расписанием — получите готовый PDF для печати</p>
+
+    <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">📄</div>
+        <div class="dropzone-text">
+            Перетащите файлы сюда или <b>нажмите для выбора</b><br>
+            <small>.xlsx</small>
+        </div>
+        <input type="file" id="fileInput" multiple accept=".xlsx,.xls" style="display:none">
+    </div>
+
+    <div class="file-list" id="fileList"></div>
+
+    <button class="btn btn-primary" id="processBtn" disabled>
+        Сформировать PDF
+    </button>
+
+    <div class="status" id="status"></div>
+    <div class="report" id="report"></div>
+    <div id="downloadArea"></div>
+</div>
+</div>
+
+<!-- ════════ ПРЕДПРОСМОТР ════════ -->
+<div class="preview-section" id="previewSection">
+    <h2>Предпросмотр страниц</h2>
+    <div class="preview-pages" id="previewPages"></div>
+</div>
+
+<!-- ════════ СКРЫТЫЙ КОНТЕЙНЕР ДЛЯ РЕНДЕРИНГА ════════ -->
+<div id="renderArea"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   КОНФИГУРАЦИЯ (можно менять)
+   ═══════════════════════════════════════════════════════ */
+const CONFIG = {
+    // Листы, которые НЕ являются расписаниями (пропускаем)
+    skipSheets: new Set(["Предметы", "Звонки"]),
+    // Подстроки в имени листа для пропуска
+    skipPatterns: [],
+    // Размеры шрифта (pt)
+    minFontPt: 7,
+    maxFontPt: 14,
+    // Отступы страницы (mm)
+    pageMarginMm: 6,
+    // Поворачивать дни недели вертикально
+    rotateDayNames: true,
+};
+
+const DAYS = new Set([
+    "ПОНЕДЕЛЬНИК","ВТОРНИК","СРЕДА","ЧЕТВЕРГ","ПЯТНИЦА","СУББОТА","ВОСКРЕСЕНЬЕ"
+]);
+
+/* ═══════════════════════════════════════════════════════
+   СОСТОЯНИЕ
+   ═══════════════════════════════════════════════════════ */
+let selectedFiles = [];
+let renderedPages = [];  // [{name, title, html, element}]
+
+/* ═══════════════════════════════════════════════════════
+   UI: ЗАГРУЗКА ФАЙЛОВ
+   ═══════════════════════════════════════════════════════ */
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const fileList = document.getElementById("fileList");
+const processBtn = document.getElementById("processBtn");
+const status = document.getElementById("status");
+const report = document.getElementById("report");
+const downloadArea = document.getElementById("downloadArea");
+
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("dragover"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+dropzone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener("change", () => { addFiles(fileInput.files); fileInput.value = ""; });
+
+function addFiles(fl) {
+    for (const f of fl) {
+        if (!selectedFiles.some(s => s.name === f.name && s.size === f.size)) {
+            selectedFiles.push(f);
+        }
+    }
+    renderFileList();
+}
+
+function renderFileList() {
+    fileList.innerHTML = "";
+    selectedFiles.forEach((f, i) => {
+        const div = document.createElement("div");
+        div.className = "file-item";
+        div.innerHTML = `<span class="name">${esc(f.name)}</span>
+            <span class="size">${(f.size/1024).toFixed(0)} КБ</span>
+            <button class="remove" data-idx="${i}">&times;</button>`;
+        fileList.appendChild(div);
+    });
+    processBtn.disabled = selectedFiles.length === 0;
+    status.className = "status";
+    report.style.display = "none";
+    downloadArea.innerHTML = "";
+    document.getElementById("previewSection").style.display = "none";
+}
+
+fileList.addEventListener("click", e => {
+    if (e.target.classList.contains("remove")) {
+        selectedFiles.splice(+e.target.dataset.idx, 1);
+        renderFileList();
+    }
+});
+
+function esc(s) {
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+/* ═══════════════════════════════════════════════════════
+   ОБРАБОТКА
+   ═══════════════════════════════════════════════════════ */
+processBtn.addEventListener("click", () => processFiles());
+
+async function processFiles() {
+    if (!selectedFiles.length) return;
+
+    processBtn.disabled = true;
+    processBtn.innerHTML = '<span class="spinner"></span> Обработка...';
+    status.className = "status loading";
+    status.textContent = "Чтение файлов и генерация расписания...";
+    report.style.display = "none";
+    downloadArea.innerHTML = "";
+    document.getElementById("previewSection").style.display = "none";
+
+    const reportData = { processed: [], skipped: [], errors: [] };
+    renderedPages = [];
+
+    try {
+        for (const file of selectedFiles) {
+            await processOneFile(file, reportData);
+        }
+
+        if (renderedPages.length === 0) {
+            status.className = "status error";
+            status.textContent = "Не найдено листов с расписанием для обработки";
+        } else {
+            status.className = "status success";
+            status.textContent = `Готово! Обработано страниц: ${renderedPages.length}`;
+            showDownloadButtons();
+            showPreview();
+        }
+        showReport(reportData);
+    } catch (err) {
+        status.className = "status error";
+        status.textContent = `Ошибка: ${err.message}`;
+        console.error(err);
+    } finally {
+        processBtn.disabled = false;
+        processBtn.innerHTML = "Сформировать PDF";
+    }
+}
+
+async function processOneFile(file, reportData) {
+    const data = await file.arrayBuffer();
+    let wb;
+    try {
+        wb = XLSX.read(data, { type: "array", cellFormula: true, cellStyles: true });
+    } catch (e) {
+        reportData.errors.push(`Не удалось прочитать файл «${file.name}»: ${e.message}`);
+        return;
+    }
+
+    // 1) Загрузить расписание звонков
+    const bells = loadBells(wb);
+
+    // 2) Обработать каждый лист
+    for (const sheetName of wb.SheetNames) {
+        const skipReason = shouldSkip(sheetName);
+        if (skipReason) {
+            reportData.skipped.push({ file: file.name, sheet: sheetName, reason: skipReason });
+            continue;
+        }
+
+        const ws = wb.Sheets[sheetName];
+        const parsed = parseSheet(ws, sheetName, bells);
+        if (!parsed) {
+            reportData.skipped.push({ file: file.name, sheet: sheetName, reason: "Слишком мало данных" });
+            continue;
+        }
+
+        const pageHtml = buildPageHtml(parsed);
+        renderedPages.push({
+            name: sheetName,
+            title: parsed.title,
+            file: file.name,
+            html: pageHtml,
+        });
+        reportData.processed.push({ file: file.name, sheet: sheetName, title: parsed.title });
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   ПАРСИНГ EXCEL
+   ═══════════════════════════════════════════════════════ */
+function shouldSkip(name) {
+    if (CONFIG.skipSheets.has(name)) return `Лист «${name}» — служебный`;
+    for (const pat of CONFIG.skipPatterns) {
+        if (name.toLowerCase().includes(pat.toLowerCase())) return `Совпал шаблон «${pat}»`;
+    }
+    return null;
+}
+
+function loadBells(wb) {
+    const bells = {};
+    const ws = wb.Sheets["Звонки"];
+    if (!ws) return bells;
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+    for (let r = range.s.r; r <= range.e.r; r++) {
+        for (let c = range.s.c; c <= range.e.c; c++) {
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const cell = ws[addr];
+            if (cell && cell.v != null) {
+                bells[addr] = String(cell.v);
+            }
+        }
+    }
+    return bells;
+}
+
+function resolveValue(cell, bells) {
+    if (!cell) return "";
+    // Проверяем формулу-ссылку на Звонки
+    if (cell.f) {
+        const m = cell.f.match(/^Звонки!([A-Z]+)(\d+)$/i);
+        if (m) {
+            const ref = XLSX.utils.encode_cell({
+                r: parseInt(m[2]) - 1,
+                c: XLSX.utils.decode_col(m[1].toUpperCase())
+            });
+            if (bells[ref]) return bells[ref];
+        }
+    }
+    if (cell.v != null) return String(cell.v);
+    return "";
+}
+
+function parseSheet(ws, sheetName, bells) {
+    const ref = ws["!ref"];
+    if (!ref) return null;
+    const range = XLSX.utils.decode_range(ref);
+    const numRows = range.e.r - range.s.r + 1;
+    const numCols = range.e.c - range.s.c + 1;
+    if (numRows < 3) return null;
+
+    // Карта merged cells: {r_c: {rs, cs}} для origin, Set для covered
+    const mergeMap = {};
+    const covered = new Set();
+    if (ws["!merges"]) {
+        for (const m of ws["!merges"]) {
+            const key = `${m.s.r}_${m.s.c}`;
+            mergeMap[key] = {
+                rs: m.e.r - m.s.r + 1,
+                cs: m.e.c - m.s.c + 1,
+            };
+            for (let r = m.s.r; r <= m.e.r; r++) {
+                for (let c = m.s.c; c <= m.e.c; c++) {
+                    if (r !== m.s.r || c !== m.s.c) {
+                        covered.add(`${r}_${c}`);
+                    }
+                }
+            }
+        }
+    }
+
+    // Считать данные
+    const rows = [];
+    let title = "";
+    for (let r = range.s.r; r <= range.e.r; r++) {
+        const row = [];
+        for (let c = range.s.c; c <= range.e.c; c++) {
+            if (covered.has(`${r}_${c}`)) continue;
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const cell = ws[addr];
+            const val = resolveValue(cell, bells);
+            if (r === range.s.r && c === range.s.c) title = val;
+
+            const cd = { value: val, rowspan: 1, colspan: 1, bold: false, col: c - range.s.c };
+            const mk = `${r}_${c}`;
+            if (mergeMap[mk]) {
+                cd.rowspan = mergeMap[mk].rs;
+                cd.colspan = mergeMap[mk].cs;
+            }
+            // Определяем жирный по позиции (строки 0-2 или первый столбец дней)
+            if (r - range.s.r < 3) cd.bold = true;
+            row.push(cd);
+        }
+        rows.push(row);
+    }
+
+    return { name: sheetName, title, rows, numRows, numCols };
+}
+
+/* ═══════════════════════════════════════════════════════
+   РЕНДЕРИНГ HTML-СТРАНИЦЫ
+   ═══════════════════════════════════════════════════════ */
+function estimateFontSize(numRows) {
+    if (numRows >= 44) return CONFIG.minFontPt;
+    if (numRows >= 38) return Math.max(CONFIG.minFontPt, 8);
+    if (numRows >= 32) return Math.max(CONFIG.minFontPt, 9);
+    if (numRows >= 28) return Math.max(CONFIG.minFontPt, 10);
+    return CONFIG.maxFontPt;
+}
+
+function isDayCell(val) {
+    return DAYS.has(val.trim().toUpperCase());
+}
+
+function buildPageHtml(sheet) {
+    const fontSize = estimateFontSize(sheet.numRows);
+    const dense = sheet.numRows >= 40;
+    const cellPad = dense ? "1px 2px" : "2px 3px";
+    const titleFontSize = Math.min(fontSize + 3, CONFIG.maxFontPt + 3);
+    const smallFontSize = Math.max(fontSize - 1, CONFIG.minFontPt);
+    const lineH = dense ? 1.05 : 1.15;
+    const timColW = "5.5em";
+
+    let html = "";
+    for (let ri = 0; ri < sheet.rows.length; ri++) {
+        const row = sheet.rows[ri];
+        let rowClass = "";
+        if (ri === 0) rowClass = "title-row";
+        else if (ri === 1) rowClass = "teacher-row";
+        else if (ri === 2) rowClass = "header-row";
+
+        html += `<tr${rowClass ? ` class="${rowClass}"` : ""}>`;
+        for (const cell of row) {
+            const tag = ri < 3 ? "th" : "td";
+            let attrs = "";
+            let styles = [];
+            let cls = [];
+
+            if (cell.rowspan > 1) attrs += ` rowspan="${cell.rowspan}"`;
+            if (cell.colspan > 1) attrs += ` colspan="${cell.colspan}"`;
+
+            // Вертикальный день недели
+            if (CONFIG.rotateDayNames && isDayCell(cell.value) && cell.rowspan > 1) {
+                cls.push("day-vertical");
+                styles.push(`font-size:${smallFontSize}pt`);
+            }
+
+            // Размер шрифта для специальных строк
+            if (ri === 0) styles.push(`font-size:${titleFontSize}pt`);
+            else if (ri === 1) styles.push(`font-size:${smallFontSize}pt`);
+
+            // Номер урока — узкая колонка
+            if (ri >= 3 && cell.col === 1) cls.push("lesson-num");
+            // Время
+            if (ri >= 3 && cell.col === 2) {
+                cls.push("time-col");
+                styles.push(`font-size:${smallFontSize}pt`);
+                styles.push(`width:${timColW}`);
+            }
+
+            if (cls.length) attrs += ` class="${cls.join(" ")}"`;
+            if (styles.length) attrs += ` style="${styles.join(";")}"`;
+
+            html += `<${tag}${attrs}>${esc(cell.value)}</${tag}>`;
+        }
+        html += `</tr>`;
+    }
+
+    return `<div class="timetable-page" style="font-size:${fontSize}pt;line-height:${lineH};padding:${CONFIG.pageMarginMm}mm">
+<table>${html}</table>
+</div>`;
+}
+
+/* ═══════════════════════════════════════════════════════
+   ПРЕДПРОСМОТР
+   ═══════════════════════════════════════════════════════ */
+function showPreview() {
+    const section = document.getElementById("previewSection");
+    const container = document.getElementById("previewPages");
+    container.innerHTML = "";
+    section.style.display = "block";
+
+    for (let i = 0; i < renderedPages.length; i++) {
+        const p = renderedPages[i];
+        const wrapper = document.createElement("div");
+        wrapper.className = "preview-page-wrapper";
+        wrapper.innerHTML = `<div class="preview-page-label">Стр. ${i+1}: ${esc(p.name)} — ${esc(p.file)}</div>`;
+        const pageDiv = document.createElement("div");
+        pageDiv.innerHTML = p.html;
+        wrapper.appendChild(pageDiv);
+        container.appendChild(wrapper);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   ГЕНЕРАЦИЯ PDF
+   ═══════════════════════════════════════════════════════ */
+function showDownloadButtons() {
+    downloadArea.innerHTML = "";
+    const row = document.createElement("div");
+    row.className = "buttons-row";
+
+    const btnPdf = document.createElement("button");
+    btnPdf.className = "btn btn-success";
+    btnPdf.textContent = `Скачать PDF (${renderedPages.length} стр.)`;
+    btnPdf.onclick = generatePdf;
+    row.appendChild(btnPdf);
+
+    const btnPrint = document.createElement("button");
+    btnPrint.className = "btn btn-outline";
+    btnPrint.textContent = "Печать";
+    btnPrint.onclick = printPages;
+    row.appendChild(btnPrint);
+
+    downloadArea.appendChild(row);
+}
+
+async function generatePdf() {
+    const statusEl = document.getElementById("status");
+    statusEl.className = "status loading";
+    statusEl.textContent = "Генерация PDF...";
+
+    try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+        const pageW = 210;
+        const pageH = 297;
+
+        // Рендерим каждую страницу в скрытый div, делаем canvas, добавляем в PDF
+        const renderArea = document.getElementById("renderArea");
+
+        for (let i = 0; i < renderedPages.length; i++) {
+            if (i > 0) pdf.addPage("a4", "portrait");
+
+            statusEl.textContent = `Генерация PDF... страница ${i+1} из ${renderedPages.length}`;
+
+            // Создаём временный элемент с точными размерами A4
+            const tempDiv = document.createElement("div");
+            tempDiv.style.cssText = `width:198mm;min-height:285mm;position:absolute;left:0;top:0;background:#fff;`;
+            tempDiv.innerHTML = renderedPages[i].html;
+            // Ставим table height:100% чтобы заполнить страницу
+            const tbl = tempDiv.querySelector("table");
+            if (tbl) tbl.style.height = "285mm";
+            renderArea.appendChild(tempDiv);
+
+            // Небольшая задержка для рендеринга
+            await new Promise(r => setTimeout(r, 50));
+
+            const canvas = await html2canvas(tempDiv, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                width: tempDiv.scrollWidth,
+                height: tempDiv.scrollHeight,
+                backgroundColor: "#ffffff",
+            });
+
+            renderArea.removeChild(tempDiv);
+
+            const imgData = canvas.toDataURL("image/jpeg", 0.95);
+            const imgW = pageW - CONFIG.pageMarginMm * 2;
+            const imgH = (canvas.height / canvas.width) * imgW;
+            const finalH = Math.min(imgH, pageH - CONFIG.pageMarginMm * 2);
+            const finalW = (finalH < imgH) ? (canvas.width / canvas.height) * finalH : imgW;
+            const x = (pageW - finalW) / 2;
+            const y = (pageH - finalH) / 2;
+
+            pdf.addImage(imgData, "JPEG", x, y, finalW, finalH);
+        }
+
+        pdf.save("Расписание.pdf");
+        statusEl.className = "status success";
+        statusEl.textContent = `PDF сохранён! (${renderedPages.length} стр.)`;
+    } catch (err) {
+        statusEl.className = "status error";
+        statusEl.textContent = `Ошибка генерации PDF: ${err.message}`;
+        console.error(err);
+    }
+}
+
+function printPages() {
+    const renderArea = document.getElementById("renderArea");
+    renderArea.innerHTML = "";
+    for (const p of renderedPages) {
+        const div = document.createElement("div");
+        div.innerHTML = p.html;
+        // Ставим table height для заполнения страницы при печати
+        const tbl = div.querySelector("table");
+        if (tbl) tbl.style.height = "100%";
+        renderArea.appendChild(div.firstElementChild);
+    }
+    window.print();
+}
+
+/* ═══════════════════════════════════════════════════════
+   ОТЧЁТ
+   ═══════════════════════════════════════════════════════ */
+function showReport(r) {
+    let html = "";
+    if (r.processed.length) {
+        html += `<h3>Обработанные листы (${r.processed.length})</h3><ul>`;
+        r.processed.forEach(s => {
+            html += `<li><b>${esc(s.sheet)}</b> — ${esc(s.title)} <small style="color:#64748b">(${esc(s.file)})</small></li>`;
+        });
+        html += "</ul>";
+    }
+    if (r.skipped.length) {
+        html += `<h3>Пропущенные листы</h3><ul>`;
+        r.skipped.forEach(s => {
+            html += `<li class="skipped">${esc(s.sheet)} — ${esc(s.reason)}</li>`;
+        });
+        html += "</ul>";
+    }
+    if (r.errors.length) {
+        html += `<h3 style="color:#dc2626">Ошибки</h3><ul>`;
+        r.errors.forEach(e => { html += `<li style="color:#dc2626">${esc(e)}</li>`; });
+        html += "</ul>";
+    }
+    if (html) {
+        report.innerHTML = html;
+        report.style.display = "block";
+    }
+}
+</script>
+</body>
+</html>
